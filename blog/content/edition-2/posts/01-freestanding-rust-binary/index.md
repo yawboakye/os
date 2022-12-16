@@ -16,21 +16,24 @@ The first step in creating our own operating system kernel is to create a Rust e
 
 This blog is openly developed on [GitHub]. If you have any problems or questions, please open an issue there. You can also leave comments [at the bottom]. The complete source code for this post can be found in the [`post-01`][post branch] branch.
 
-[GitHub]: https://github.com/phil-opp/blog_os
+[github]: https://github.com/phil-opp/blog_os
 [at the bottom]: #comments
+
 <!-- fix for zola anchor checker (target is in template): <a id="comments"> -->
+
 [post branch]: https://github.com/phil-opp/blog_os/tree/post-01
 
 <!-- toc -->
 
 ## Introduction
+
 To write an operating system kernel, we need code that does not depend on any operating system features. This means that we can't use threads, files, heap memory, the network, random numbers, standard output, or any other features requiring OS abstractions or specific hardware. Which makes sense, since we're trying to write our own OS and our own drivers.
 
 This means that we can't use most of the [Rust standard library], but there are a lot of Rust features that we _can_ use. For example, we can use [iterators], [closures], [pattern matching], [option] and [result], [string formatting], and of course the [ownership system]. These features make it possible to write a kernel in a very expressive, high level way without worrying about [undefined behavior] or [memory safety].
 
 [option]: https://doc.rust-lang.org/core/option/
-[result]:https://doc.rust-lang.org/core/result/
-[Rust standard library]: https://doc.rust-lang.org/std/
+[result]: https://doc.rust-lang.org/core/result/
+[rust standard library]: https://doc.rust-lang.org/std/
 [iterators]: https://doc.rust-lang.org/book/ch13-02-iterators.html
 [closures]: https://doc.rust-lang.org/book/ch13-01-closures.html
 [pattern matching]: https://doc.rust-lang.org/book/ch06-00-enums.html
@@ -44,6 +47,7 @@ In order to create an OS kernel in Rust, we need to create an executable that ca
 This post describes the necessary steps to create a freestanding Rust binary and explains why the steps are needed. If you're just interested in a minimal example, you can **[jump to the summary](#summary)**.
 
 ## Disabling the Standard Library
+
 By default, all Rust crates link the [standard library], which depends on the operating system for features such as threads, files, or networking. It also depends on the C standard library `libc`, which closely interacts with OS services. Since our plan is to write an operating system, we can't use any OS-dependent libraries. So we have to disable the automatic inclusion of the standard library through the [`no_std` attribute].
 
 [standard library]: https://doc.rust-lang.org/std/
@@ -135,17 +139,17 @@ fn panic(_info: &PanicInfo) -> ! {
 }
 ```
 
-The [`PanicInfo` parameter][PanicInfo] contains the file and line where the panic happened and the optional panic message. The function should never return, so it is marked as a [diverging function] by returning the [“never” type] `!`. There is not much we can do in this function for now, so we just loop indefinitely.
+The [`PanicInfo` parameter][panicinfo] contains the file and line where the panic happened and the optional panic message. The function should never return, so it is marked as a [diverging function] by returning the [“never” type] `!`. There is not much we can do in this function for now, so we just loop indefinitely.
 
-[PanicInfo]: https://doc.rust-lang.org/nightly/core/panic/struct.PanicInfo.html
+[panicinfo]: https://doc.rust-lang.org/nightly/core/panic/struct.PanicInfo.html
 [diverging function]: https://doc.rust-lang.org/1.30.0/book/first-edition/functions.html#diverging-functions
 [“never” type]: https://doc.rust-lang.org/nightly/std/primitive.never.html
 
 ## The `eh_personality` Language Item
 
-Language items are special functions and types that are required internally by the compiler. For example, the [`Copy`] trait is a language item that tells the compiler which types have [_copy semantics_][`Copy`]. When we look at the [implementation][copy code], we see it has the special `#[lang = "copy"]` attribute that defines it as a language item.
+Language items are special functions and types that are required internally by the compiler. For example, the [`Copy`] trait is a language item that tells the compiler which types have [_copy semantics_][`copy`]. When we look at the [implementation][copy code], we see it has the special `#[lang = "copy"]` attribute that defines it as a language item.
 
-[`Copy`]: https://doc.rust-lang.org/nightly/core/marker/trait.Copy.html
+[`copy`]: https://doc.rust-lang.org/nightly/core/marker/trait.Copy.html
 [copy code]: https://github.com/rust-lang/rust/blob/485397e49a02a3b7ff77c17e4a3f16c653925cb3/src/libcore/marker.rs#L296-L299
 
 While providing custom implementations of language items is possible, it should only be done as a last resort. The reason is that language items are highly unstable implementation details and not even type checked (so the compiler doesn't even check if a function has the right argument types). Fortunately, there is a more stable way to fix the above language item error.
@@ -190,11 +194,12 @@ One might think that the `main` function is the first function called when you r
 
 In a typical Rust binary that links the standard library, execution starts in a C runtime library called `crt0` (“C runtime zero”), which sets up the environment for a C application. This includes creating a stack and placing the arguments in the right registers. The C runtime then invokes the [entry point of the Rust runtime][rt::lang_start], which is marked by the `start` language item. Rust only has a very minimal runtime, which takes care of some small things such as setting up stack overflow guards or printing a backtrace on panic. The runtime then finally calls the `main` function.
 
-[rt::lang_start]: https://github.com/rust-lang/rust/blob/bb4d1491466d8239a7a5fd68bd605e3276e97afb/src/libstd/rt.rs#L32-L73
+[rt::lang_start]: https://github.com/rust-lang/rust/blob/9c07efe84f28a44f3044237696acc295aa407ee5/library/std/src/rt.rs#L159
 
 Our freestanding executable does not have access to the Rust runtime and `crt0`, so we need to define our own entry point. Implementing the `start` language item wouldn't help, since it would still require `crt0`. Instead, we need to overwrite the `crt0` entry point directly.
 
 ### Overwriting the Entry Point
+
 To tell the Rust compiler that we don't want to use the normal entry point chain, we add the `#![no_main]` attribute.
 
 ```rust
@@ -224,7 +229,7 @@ By using the `#[no_mangle]` attribute, we disable [name mangling] to ensure that
 We also have to mark the function as `extern "C"` to tell the compiler that it should use the [C calling convention] for this function (instead of the unspecified Rust calling convention). The reason for naming the function `_start` is that this is the default entry point name for most systems.
 
 [name mangling]: https://en.wikipedia.org/wiki/Name_mangling
-[C calling convention]: https://en.wikipedia.org/wiki/Calling_convention
+[c calling convention]: https://en.wikipedia.org/wiki/Calling_convention
 
 The `!` return type means that the function is diverging, i.e. not allowed to ever return. This is required because the entry point is not called by any function, but invoked directly by the operating system or bootloader. So instead of returning, the entry point should e.g. invoke the [`exit` system call] of the operating system. In our case, shutting down the machine could be a reasonable action, since there's nothing left to do if a freestanding binary returns. For now, we fulfill the requirement by looping endlessly.
 
@@ -258,14 +263,14 @@ LLVM version: 8.0
 
 The above output is from a `x86_64` Linux system. We see that the `host` triple is `x86_64-unknown-linux-gnu`, which includes the CPU architecture (`x86_64`), the vendor (`unknown`), the operating system (`linux`), and the [ABI] (`gnu`).
 
-[ABI]: https://en.wikipedia.org/wiki/Application_binary_interface
+[abi]: https://en.wikipedia.org/wiki/Application_binary_interface
 
 By compiling for our host triple, the Rust compiler and the linker assume that there is an underlying operating system such as Linux or Windows that uses the C runtime by default, which causes the linker errors. So, to avoid the linker errors, we can compile for a different environment with no underlying operating system.
 
 An example of such a bare metal environment is the `thumbv7em-none-eabihf` target triple, which describes an [embedded] [ARM] system. The details are not important, all that matters is that the target triple has no underlying operating system, which is indicated by the `none` in the target triple. To be able to compile for this target, we need to add it in rustup:
 
 [embedded]: https://en.wikipedia.org/wiki/Embedded_system
-[ARM]: https://en.wikipedia.org/wiki/ARM_architecture
+[arm]: https://en.wikipedia.org/wiki/ARM_architecture
 
 ```
 rustup target add thumbv7em-none-eabihf
